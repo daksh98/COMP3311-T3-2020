@@ -1,7 +1,7 @@
 # COMP3311 20T3 - Assignment 1
 
 - Mapping ER Designs to SQL
-- grade : 11.9/12
+- grade : 11.8/12
 - https://cgi.cse.unsw.edu.au/~cs3311/20T3/assignments/ass1/index.php
 
 ## Goal: 
