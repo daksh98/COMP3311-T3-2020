@@ -5,6 +5,8 @@ Database systems UNSW
 - ass 2 - 14/16 - SQL, PLpgSQL
 - ass 3 - 16/16 - Python, Psycopg2 and IMDB database
 
+Overall course mark 84 DN
+
 ### Course Summary
 This course aims to explore in depth the practice of developing database applications and the theory behind relational database systems. It will also give a very brief overview of the technologies used in implementing database management systems and the past, present and future of database systems.
 #### On successfully completing this course, students are be able to:
