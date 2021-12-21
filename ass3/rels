@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... print info about different releases for Movie
+# by Daksh Mukhra
+
+import sys
+import psycopg2
+import re
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+# find number of moives with that title ...
+def count_movies(cur,movie_title):
+    q = "select count(title) from movies where title ~* %s"
+    #print(cur.mogrify(q, [movie_title]))
+    cur.execute(q, [movie_title]) # do you need the array [] ??
+    res = cur.fetchone()
+    if res is None:
+      print("Invalid movie",movie_title)
+      exit(1)
+    return res
+# set up some globals
+
+usage = "Usage: rels 'PartialMovieTitle'"
+db = None
+cur = None
+movie_title = None
+# process command-line args
+argc = len(sys.argv)
+
+if argc == 1:
+    print(usage)
+    exit(1)
+elif argc > 2:
+    movie_title = sys.argv[1]
+
+
+# if non partial movie_title
+qry1 = """
+select a.local_title, a.region, a.language
+from movies m
+join aliases a on (m.id = a.movie_id)
+where m.title ~* %s
+order by a.ordering
+"""
+# if partial movie_title
+qry2 = """
+select title, start_year from movies
+where title ~* %s
+order by start_year, title;
+"""
+
+# manipulate database
+
+# add starting tuple for partial case and remove trailing spaces
+try:
+    db = psycopg2.connect("dbname=imdb")
+    cur = db.cursor()
+    # detrmine if partial movie title given or non partial
+    count = count_movies(cur,movie_title)
+    if count[0] == 0:
+        print(f"No movie matching \'{movie_title}\'")
+        exit(1)
+    elif count[0] == 1:
+        #PartialMovieTitle
+        cur.execute(qry2, [movie_title])
+        movie = cur.fetchone()
+        m_title, year = movie
+        #m_title = re.sub("\'", "", m_title)
+        print(f"{m_title} ({year}) was also released as")
+        cur.execute(qry1, [movie_title])
+        #print(cur.mogrify(qry1, [movie_title]))
+        for movies in cur.fetchall():
+            local_title, region, language = movies
+            if region is None:
+                print(f"'{local_title}' (language: {language.strip()})")
+            elif language is None:
+                print(f"'{local_title}' (region: {region.strip()})")
+            elif language is None and region is None:
+                print(f"Title (Year) has no alternative releases")
+            else:
+                print(f"'{local_title.strip()}' (region: {region.strip()}, language: {language.strip()})")
+
+    elif count[0] > 1:
+        print(f"Movies matching '{movie_title}'")
+        print("===============")
+        cur.execute(qry2, [movie_title])
+        for movies in cur.fetchall():
+            title, start_year = movies
+            print(f"{title} ({start_year})")
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()

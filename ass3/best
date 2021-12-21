@@ -1,0 +1,57 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... print name, year, ratings of top N movies
+# by Daksh Mukhra
+
+import sys
+import psycopg2
+#from helpers import whatever, functions, you, need
+def is_number(s):
+    try:
+        int(s)
+        #print(s)
+        return True
+    except ValueError:
+        return False
+# define any local helper functions here\
+
+# set up some globals
+#usage = "Usage: best [N]"
+db = None
+cur = None
+query = """
+select rating,title,start_year from movies order by rating desc, title;
+"""
+# process command-line args
+i = 0
+argc = len(sys.argv)
+usage = "Usage: best [N]"
+if argc == 1:
+    limit = 10;
+if argc > 1:
+    num = is_number(sys.argv[1])
+    if num == False:
+        print(usage)
+        exit(1)
+    limit = int(sys.argv[1])
+    # value of zero is always a boolean , have to typecast first ...
+    if limit == 0:
+        print(usage)
+        exit(1)
+# manipulate database
+try:
+    db = psycopg2.connect("dbname=imdb")
+    cur = db.cursor()
+    cur.execute(query)
+    while i < limit:
+        movie_info = cur.fetchone()
+        if movie_info is None:
+            print("No such movie")
+            exit(0)
+        rating,title,year = movie_info
+        print(f"{rating} {title} ({year})")
+        i = i + 1
+except psycopg2.Error as err:
+    print("DB error: ", err)
+finally:
+    if db:
+        db.close()

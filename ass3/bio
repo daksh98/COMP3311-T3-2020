@@ -1,0 +1,327 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... get Name's biography/filmography
+# by Daksh Mukhra
+
+# the difference between your one and josh is that you only queried once using the the view created that combined everything
+# it would o been much easier if you queried multiple times in a for loop like josh .....
+
+#didnt need to get everything in one view....
+
+import sys
+import psycopg2
+import re
+
+# define any local helper functions here
+def convert_to_uupercase(m):
+    #Convert the second group to uppercase and join both group 1 & group 2
+    return m.group(1) + m.group(2).upper()
+
+# check if number
+def is_number(s):
+    try:
+        int(s)
+        #print(s)
+        return True
+    except ValueError:
+        return False
+# helper to convert set of tuples into dictionary
+def Convert(tup, di):
+    di = dict(tup)
+    return di
+
+# find number of people with that name
+def Count_people(cur,name,yearw):
+    q1 = "select count(name) from names where name ~* %s"
+    q2 = "select count(name) from names where name ~* %s and birth_year = %s"
+    if yearw == 0:
+        #print(cur.mogrify(q, [movie_title]))
+        cur.execute(q1, [name]) # why do you need the array [] ??
+        res = cur.fetchone()
+        if res is None:
+            print(f"No name matching '{name}'")
+            exit(1)
+        return res
+    if yearw != 0:
+        #print(cur.mogrify(q, [movie_title]))
+        cur.execute(q2, [name,yearw]) # why do you need the array [] ??
+        res = cur.fetchone()
+        if res is None:
+            print(f"No name matching '{name}'")
+            exit(1)
+        return res
+
+# set up some globals
+usage = "Usage: bio 'NamePattern' [Year]"
+db = None
+cur = None
+name = None
+yearw = 0;
+# process command-line args
+argc = len(sys.argv)
+if argc == 1:
+    print(usage)
+    exit(1)
+elif argc == 2:
+    name = sys.argv[1]
+elif argc > 2:
+    name = sys.argv[1]
+    num = is_number(sys.argv[2])
+    if num == False:
+        print(usage)
+        exit(1)
+    else:
+        yearw = sys.argv[2]
+
+#-----------------------------------------------------------------------
+# all queries use the view built in xtras.sql ...
+
+# if partial movie_title
+    # if year not given
+qry1_ny = """
+select name, birth_year, death_year from names
+where name ~* %s
+order by name, birth_year, id;
+"""
+    # if year given
+qry1_y = """
+select name, birth_year, death_year from names
+where name ~* %s and birth_year = %s
+order by name, birth_year, id
+"""
+
+# non partial name with out year
+qry2_ny = """
+select * from Q4_pt3
+where name ~* %s
+order by start_year, title, ordering, role_played;
+ """
+# non-partial name with year
+qry2_y = """
+select * from Q4_pt3
+where name ~* %s  and birth_year = %s
+order by start_year, title, ordering, role_played;
+ """
+
+# count of no. of ways a person has been involved in a movie
+#year given
+qry_count_y = """
+select title , count(title)
+from Q4_pt3
+where name ~* %s and birth_year = %s
+group by title, start_year
+order by start_year;
+"""
+#no year
+qry_count_ny = """
+select title , count(title)
+from Q4_pt3
+where name ~* %s
+group by title, start_year
+order by start_year;
+"""
+
+# get all the distinct crew roles -- (assuming number of crew roles are small ...)
+qry_cr = """
+select distinct role from crew_roles;
+"""
+#-----------------------------------------------------------------------
+
+try:
+    db = psycopg2.connect("dbname=imdb")
+    cur = db.cursor()
+    # get crew role list ...
+    cur.execute(qry_cr)
+    cr = cur.fetchall()
+    # convert list of tupls in to a list of strings ...
+    crew_list = [item for t in cr for item in t]
+    for t in crew_list:
+        a_string = t
+        t = a_string.replace('"', "")
+
+    count = Count_people(cur,name,yearw)
+    if count[0] == 0:
+       if yearw == 0:
+            print(f"No name matching \'{name}\'")
+            exit(1)
+       if yearw != 0:
+            print(f"No name matching \'{name}\' {yearw}")
+            exit(1)
+    elif count[0] == 1:
+        if yearw == 0:
+            #case with exact name but not year
+            # make hash of , count of no. of ways a person has been involved in a movie
+            cur.execute(qry_count_ny, [name])
+            tups = cur.fetchall()
+            dictionary = {}
+            dictionary = Convert(tups, dictionary)
+
+            #print(dictionary)
+            # get starting tuple for output
+            cur.execute(qry1_ny, [name])
+            names = cur.fetchone()
+            name, birth_year, death_year = names
+            #Filmography for Kyle MacLachlan (1959-)
+            if death_year is None and  birth_year is not None:
+                print(f"Filmography for {name} ({birth_year}-)")
+                print("===============")
+            if death_year is None and  birth_year is None:
+                print(f"Filmography for {name} (???)")
+                print("===============")
+            if death_year is not None and  birth_year is not None:
+                print(f"Filmography for {name} ({birth_year}-{death_year})")
+                print("===============")
+            if death_year is not None and  birth_year is None:
+                print(f"Filmography for {name} (-{death_year})")
+                print("===============")
+
+           # start the output process
+            cur.execute(qry2_ny, [name])
+            big_list = cur.fetchall()
+            bl_len = len(big_list)
+            block_iterator = 0
+            overall_it = 0
+            while overall_it < bl_len:
+                # process is on each block for the same movie in the big view generated by the sql quuery ....  & where a block is a colection of tuples for the same movie
+                # after were done with each block we move the overall iterator to how many movies were in the block
+                title,start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[overall_it] # use overall_i to get the block details
+                x = dictionary[title]
+                #print(f"{title} - {x}")
+                start = 0
+                i = 0
+                block_iterator = overall_it # set block iterator to start of block
+                # in this while loop print only those tuples in big view with acting roles for the particular block ....
+                while i < x:
+                    if start == 0:
+                        # print the just the movie name
+                        title, start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[block_iterator] # cehck if you need to keep redecalreing these variables ...
+                        print(f"{title} ({start_year})")
+                        start = 1
+                        continue
+                    title, start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[block_iterator]
+                    if role_played not in crew_list:
+                        # then its a crew role and we print accordingly
+                        #role_played = role_played.capitalize()
+                        print(f" playing {role_played}")
+                        block_iterator += 1
+                        i += 1
+                    if role_played in crew_list:
+                        block_iterator += 1
+                        i += 1
+                        continue
+                i = 0
+                # reset block_iterator to star of block ...
+                block_iterator = overall_it
+                # now we redo the process printing the crew roles
+                while i < x:
+                    title, start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[block_iterator]
+                    if role_played not in crew_list:
+                        block_iterator += 1
+                        i += 1
+                        continue
+                    if role_played  in crew_list:
+                        # then its crew role print accordingly
+                        role_played = role_played.capitalize()
+                        role_played = re.sub('_', ' ', role_played)
+                        print(f" as {role_played}")
+                        block_iterator += 1
+                        i += 1
+                overall_it = block_iterator
+        elif yearw != 0:
+            # case of year is given but same logic as before
+            cur.execute(qry_count_y, [name, yearw])
+            tups = cur.fetchall()
+            dictionary = {}
+            dictionary = Convert(tups, dictionary)
+
+            cur.execute(qry1_y, [name, yearw])
+            names = cur.fetchone()
+            name, birth_year, death_year = names
+
+            if death_year is None and  birth_year is not None:
+                print(f"Filmography for {name} ({birth_year}-)")
+                print("===============")
+            if death_year is None and  birth_year is None:
+                print(f"Filmography for {name} (???)")
+                print("===============")
+            if death_year is not None and  birth_year is not None:
+                print(f"Filmography for {name} ({birth_year}-{death_year})")
+                print("===============")
+            if death_year is not None and  birth_year is None:
+                print(f"Filmography for {name} (-{death_year})")
+                print("===============")
+
+            cur.execute(qry2_y, [name,yearw])
+            big_list = cur.fetchall()
+            bl_len = len(big_list)
+            block_iterator = 0
+            overall_it = 0
+            while overall_it < bl_len:
+               title,start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[overall_it]
+               x = dictionary[title]
+               start = 0
+               i = 0
+               block_iterator = overall_it
+               while i < x:
+                   if start == 0:
+                       title, start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[block_iterator]
+                       print(f"{title} ({start_year})")
+                       start = 1
+                       continue
+                   title, start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[block_iterator]
+                   if role_played not in crew_list:
+                       print(f" playing {role_played}")
+                       block_iterator += 1
+                       i += 1
+                   if role_played in crew_list:
+                       block_iterator += 1
+                       i += 1
+                       continue
+               i = 0
+               block_iterator = overall_it
+               while i < x:
+                   title, start_year, movie_id, ordering, name_id, name, birth_year, role_played = big_list[block_iterator]
+                   if role_played not in crew_list:
+                       block_iterator += 1
+                       i += 1
+                       continue
+                   if role_played  in crew_list:
+                       role_played = role_played.capitalize()
+                       role_played = re.sub('_', ' ', role_played)
+                       print(f" as {role_played}")
+                       block_iterator += 1
+                       i += 1
+               overall_it = block_iterator
+    elif count[0] > 1:
+        if yearw == 0:
+            print(f"Names matching '{name}'")
+            print("===============")
+            cur.execute(qry1_ny, [name])
+            for names in cur.fetchall():
+                name, birth_year, death_year = names
+                if death_year is None and  birth_year is not None:
+                    print(f"{name} ({birth_year}-)")
+                if death_year is None and  birth_year is None:
+                    print(f"{name} (???)")
+                if death_year is not None and  birth_year is not None:
+                    print(f"{name} ({birth_year}-{death_year})")
+                if death_year is not None and  birth_year is None:
+                    print(f"{name} (-{death_year})")
+        if yearw != 0:
+            print(f"Names matching '{name}'")
+            print("===============")
+            cur.execute(qry1_y, [name,yearw])
+            for names in cur.fetchall():
+                name, birth_year, death_year = names
+                if death_year is None and  birth_year is not None:
+                    print(f"{name} ({birth_year}-)")
+                if death_year is None and  birth_year is None:
+                    print(f"{name} (???)")
+                if death_year is not None and  birth_year is not None:
+                    print(f"{name} ({birth_year}-{death_year})")
+                if death_year is not None and  birth_year is None:
+                    print(f"{name} (-{death_year})")
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()

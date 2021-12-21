@@ -1,0 +1,127 @@
+#!/usr/local/bin/python3.7
+
+
+# online session example 
+
+
+import sys
+import psycopg2
+
+
+def subjectInfo(cur,code):
+   q = "select id,longname from Subjects where code = %s"
+   cur.execute(q, [code])
+   res = cur.fetchone()
+   if res is None:
+      print("Invalid subject",code)
+      exit(1)
+   return res
+
+def termInfo(conn,name):
+   cur = conn.cursor()
+   q = "select id from Terms where termName(id) = %s"
+   cur.execute(q, [name])
+   res = cur.fetchone()
+   cur.close()
+   if res is None:
+      print("Invalid term",name)
+      conn.close()
+      exit(1)
+   return res
+
+def hasOffer(cur,subjID,termID):
+   q = "select id from Courses where subject = %s and term = %s"
+   cur.execute(q,[subjID,termID])
+   res = cur.fetchone()
+   return (not (res is None))
+
+
+subject, term = None, None
+if len(sys.argv) == 3:
+   term = sys.argv[1]
+   subject = sys.argv[2]
+if len(sys.argv) == 2:
+   term = sys.argv[1]
+if len(sys.argv) != 1:
+   print("Usage:",sys.argv[0],"[ term [ subject ] ]")
+   exit(1)
+conn = None
+
+# if known subject code and term
+qry1 = """
+select c.id, avg(e.mark)
+from   Courses c
+       join Course_enrolments e on (e.course=c.id)
+where  c.subject = %s and c.term = %s
+group  by c.id
+"""
+# if known term, all courses for that term
+qry2 = """
+select c.id, s.code, s.longname, avg(e.mark)
+from   Courses c
+       join Subjects s on (c.subject=s.id)
+       join Terms t on (c.term=t.id)
+       join Course_enrolments e on (e.course=c.id)
+where  t.id = %s
+group  by c.id, s.code, s.longname
+order  by s.code
+"""
+# if neither term nor subject, do everything
+qry3 = """
+select c.id, s.code, t.starting, termName(t.id), s.longname, avg(e.mark)
+from   Courses c
+       join Subjects s on (c.subject=s.id)
+       join Terms t on (c.term=t.id)
+       join Course_enrolments e on (e.course=c.id)
+group  by c.id, s.code, t.starting, termName(t.id), s.longname
+order  by t.starting, s.code
+"""
+try:
+   conn = psycopg2.connect(f"dbname=mymy2")
+   cur = conn.cursor()
+   subjID, termID = (None,None)
+   if subject:
+      res = subjectInfo(cur,subject)
+      subjID, subjName = res
+   if term:
+      res = termInfo(conn,term)
+      termID = res[0]
+   if subjID is not None and termID is not None:
+      if not hasOffer(cur,subjID,termID):
+         print("No offering:",subject,term)
+         exit(1)
+
+   # ok ... command line args seem valid ...
+
+   # all subjects, all terms
+   if subjID is None and termID is None:
+      cur.execute(qry3)
+      for tup in cur.fetchall():
+         cid, subjCode, starting, term, subjName, avg = tup
+         if avg is None or avg < 0.01:
+            print("None ",subjCode,term,subjName)
+         else:
+            print(f"{avg:0.2f}",subjCode,term,subjName)
+
+   # all subjects, one term
+   if subjID is None and termID is not None:
+      cur.execute(qry2, [termID])
+      for tup in cur.fetchall():
+         cid, subjCode, subjName, avg = tup
+         if avg is None or avg < 0.01:
+            print("None ",subjCode,term,subjName)
+         else:
+            print(f"{avg:0.2f}",subjCode,term,subjName)
+
+   # one subject, one term
+   if subjID is not None and termID is not None:
+      cur.execute(qry1, [subjID,termID])
+      cid, avg = cur.fetchone()
+      print(f"{avg:0.2f}",subject,term,subjName)
+
+
+except psycopg2.Error as err:
+   print("database error: ", err)
+finally:
+   if conn :
+      conn.close()

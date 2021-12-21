@@ -1,0 +1,195 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... print info about cast and crew for Movie
+# by Daksh Mukhra 
+
+#source /srvr/z5163002/env
+import sys
+import psycopg2
+import re
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+def is_number(s):
+    try:
+        int(s)
+        #print(s)
+        return True
+    except ValueError:
+        return False
+# find number of moives with that title ...
+def count_movies(cur,movie_title,yearw):
+    q1 = "select count(title) from movies where title ~* %s"
+    q2 = "select count(title) from movies where title ~* %s and start_year = %s"
+    if yearw == 0:
+        #print(cur.mogrify(q, [movie_title]))
+        cur.execute(q1, [movie_title]) # why do you need the array [] ??
+        res = cur.fetchone()
+        if res is None:
+          print("Invalid movie",movie_title)
+          exit(1)
+        return res
+    if yearw != 0:
+        #print(cur.mogrify(q, [movie_title]))
+        cur.execute(q2, [movie_title,yearw]) # why do you need the array [] ??
+        res = cur.fetchone()
+        if res is None:
+          print("Invalid movie",movie_title)
+          exit(1)
+        return res
+
+# set up some globals
+
+usage = "Usage: minfo 'MovieTitlePattern' [Year]"
+db = None
+cur = None
+movie_title = None
+yearw = 0;
+# process command-line args
+
+argc = len(sys.argv)
+
+if argc == 1:
+    print(usage)
+    exit(1)
+elif argc == 2:
+    movie_title = sys.argv[1]
+elif argc > 2:
+    movie_title = sys.argv[1]
+    num = is_number(sys.argv[2])
+    if num == False:
+        print(usage)
+        exit(1)
+    else:
+        yearw = sys.argv[2]
+
+
+# manipulate database
+
+# if partial movie_title
+    # if year not given
+qry1_ny = """
+select title, start_year from movies
+where title ~* %s
+order by start_year, title;
+"""
+
+    # if year given
+qry1_y = """
+select title, start_year from movies
+where title ~* %s and start_year = %s
+order by start_year, title;
+"""
+
+# non partial name with out year
+    #acting
+qry2_a = """
+select n.name, ar.played from principals p
+join movies m on (m.id = p.movie_id)
+join names n on (n.id = name_id)
+join acting_roles ar on (m.id = ar.movie_id and n.id = ar.name_id)
+where m.title ~* %s order by p.ordering, ar.played;
+"""
+    #crew
+qry2_c = """
+select n.name, cr.role from principals p
+join movies m on (m.id = p.movie_id)
+join names n on (n.id = name_id)
+join crew_roles cr on (m.id = cr.movie_id and n.id = cr.name_id)
+where title ~* %s order by p.ordering, cr.role;
+"""
+
+# non-partial name with year
+    #acting
+qry3_a = """
+select n.name, ar.played from principals p
+join movies m on (m.id = p.movie_id)
+join names n on (n.id = name_id)
+join acting_roles ar on (m.id = ar.movie_id and n.id = ar.name_id)
+where m.title ~* %s and m.start_year = %s
+order by p.ordering,ar.played;
+"""
+    #crew
+qry3_c = """
+select n.name, cr.role from principals p
+join movies m on (m.id = p.movie_id)
+join names n on (n.id = name_id)
+join crew_roles cr on (m.id =cr.movie_id and n.id = cr.name_id)
+where m.title ~* %s and m.start_year = %s
+order by p.ordering, cr.role;
+"""
+#print(yearw)
+
+try:
+    db = psycopg2.connect("dbname=imdb")
+    cur = db.cursor()
+
+    count = count_movies(cur,movie_title,yearw)
+    if count[0] == 0:
+       if yearw == 0:
+            print(f"No movie matching \'{movie_title}\'")
+            exit(1)
+       if yearw != 0:
+            print(f"No movie matching \'{movie_title}\' {yearw}")
+            exit(1)
+    elif count[0] == 1:
+        if yearw == 0:
+            #case with exact movie name but not year
+            cur.execute(qry1_ny, [movie_title])
+            movie = cur.fetchone()
+            m_title, year = movie
+            print(f"{m_title} ({year})")
+            print("===============")
+            print ("Starring")
+           # print("Here here here here here ")
+            cur.execute(qry2_a, [movie_title])
+            for info in cur.fetchall():
+                name, played = info
+                print(f" {name} as {played.strip()}")
+            print ("and with")
+            cur.execute(qry2_c, [movie_title])
+            for info in cur.fetchall():
+                name, role = info
+                role = role.capitalize()
+                print(f" {name}: {role.strip()}")
+        elif yearw != 0:
+            #case with exact movie name but with year
+            #print("Here here here here here ")
+            cur.execute(qry1_y, [movie_title,yearw])
+            movie = cur.fetchone()
+            m_title, year = movie
+            print(f"{m_title} ({year})")
+            print("===============")
+            print ("Starring")
+            cur.execute(qry3_a, [movie_title,year])
+            for info in cur.fetchall():
+                name, played = info
+                print(f" {name} as {played.strip()}")
+            print ("and with")
+            cur.execute(qry3_c, [movie_title,year])
+            for info in cur.fetchall():
+                name, role = info
+                role = role.capitalize()
+                print(f" {name}: {role.strip()}")
+    elif count[0] > 1:
+        if yearw == 0:
+            print(f"Movies matching '{movie_title}'")
+            print("===============")
+            cur.execute(qry1_ny, [movie_title])
+            for movies in cur.fetchall():
+                title, start_year = movies
+                print(f"{title} ({start_year})")
+        if yearw != 0:
+            print(f"Movies matching '{movie_title}' {yearw}")
+            print("===============")
+            cur.execute(qry1_y,  [movie_title,yearw])
+            for movies in cur.fetchall():
+                title, start_year = movies
+                print(f"{title} ({start_year})")
+except psycopg2.Error as err:
+  print("DB error: ", err)
+finally:
+  if db:
+    db.close()
+
+
+#query  ---- add m.id, m.title, p.ordering, for debugging

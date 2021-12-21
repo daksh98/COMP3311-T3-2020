@@ -1,0 +1,148 @@
+#!/usr/bin/python3
+# COMP3311 20T3 Ass3 ... get Name's biography/filmography
+
+import sys
+import psycopg2
+#from helpers import whatever, functions, you, need
+
+# define any local helper functions here
+
+# set up some globals
+
+usage = "Usage: bio 'NamePattern' [Year]"
+db = None
+line = "==============="
+
+# process command-line args
+
+argc = len(sys.argv)
+
+if (argc == 1):
+	print(usage)
+	exit(1)
+elif (argc == 2):
+	name = sys.argv[1]
+elif (argc == 3):
+	name = sys.argv[1]
+	year = sys.argv[2]
+	if year.isdigit() == False:
+		print(usage)
+		exit(1)
+
+# manipulate database
+
+try:
+	db = psycopg2.connect("dbname=imdb")
+
+	# ... add your code here ...
+	cur = db.cursor()
+
+	if argc == 2:
+		query = "select name, birth_year, death_year, id from names where lower(name) like lower(%s) order by name, id"
+		pattern = "%" + name + "%"
+		cur.execute(
+			cur.mogrify(query,[pattern])
+		)
+
+	elif argc == 3:
+		query = "select name, birth_year, death_year, id from names where lower(name) like lower(%s) and birth_year=%s order by name, id"
+		pattern1 = "%" + name + "%"
+		pattern2 = year
+		cur.execute(
+			cur.mogrify(query,[pattern1,pattern2])
+		)
+
+	results = cur.fetchall()
+	length = len(results)
+
+	if length == 0:
+		if argc == 2:
+			print("No name matching " + f"'{name}'")
+			exit(1)
+		elif argc == 3:
+			print("No name matching " + f"'{name}' " + f"{year}")
+			exit(1)
+	elif length > 1:
+		if argc == 2:
+			print("Names matching " + f"'{name}'")
+			print(line)
+		elif argc == 3:
+			print("Names matching " + f"'{name}' {year}")
+			print(line)
+
+	for tup in results:
+		x,y,z,a = tup
+		# name, birth, death, name_id
+
+		if length == 1:
+			if y is None and z is None:
+				print(f"Filmography for {x} (???)")
+			elif y is not None and z is not None:
+				print(f"Filmography for {x} ({y}-{z})")
+			elif y is not None:
+				print(f"Filmography for {x} ({y}-)")
+			elif z is not None:
+				print(f"Filmography for {x} (-{z})")
+
+			print(line)
+
+			new_cur = db.cursor()
+			new_cur.execute(
+				"select p.movie_id, m.title, m.start_year from principals p join movies m on (m.id = p.movie_id) where name_id=%s order by m.start_year, m.title",[a]
+			)
+			movies = new_cur.fetchall()
+
+			for tup2 in movies:
+				movie_id, title, start_year = tup2
+				print(f"{title} ({start_year})")
+				name_id = a
+				new_query = "select p.name_id, a.played from principals p join names n on (n.id = p.name_id) join acting_roles a on (a.name_id = p.name_id and a.movie_id = p.movie_id) where p.movie_id=%s and p.name_id=%s order by p.ordering, a.played"
+				new_cur.execute(
+					new_cur.mogrify(new_query,[movie_id,name_id])
+				)
+				#print(new_cur.mogrify(new_query,[movie_id,name_id]))
+
+				acting = new_cur.fetchall()
+				#print(acting)
+				for tup3 in acting:
+					name_id, role = tup3
+					print(f" playing {role}")
+
+				new_query = "select p.name_id, c.role from principals p join names n on (n.id = p.name_id) join crew_roles c on (c.name_id = p.name_id and c.movie_id = p.movie_id) where p.movie_id=%s and p.name_id=%s order by p.ordering, c.role"
+				new_cur.execute(
+					new_cur.mogrify(new_query,[movie_id,name_id])
+				)
+
+				crew = new_cur.fetchall()
+				for tup4 in crew:
+					name_id, role = tup4
+					role = role.capitalize()
+					role = role.replace("_"," ")
+					print(f" as {role}")
+
+			# spike lee - 20000490
+			# she's gotta have it - 10091939
+			# school daze - 10096054
+			# dr strangelove - 10057012
+			# pavarotti - 16964076
+
+			# select n.name, c.role from principals p join names n on (n.id = p.name_id) join crew_roles c on (c.name_id = p.name_id and c.movie_id = p.movie_id) where p.movie_id=10091939 order by p.ordering, c.role;
+			# select * from principals p join movies m on (m.id = p.movie_id) where name_id=20000490 order by m.start_year;
+
+		else:
+			if y is None and z is None:
+				print(f"{x} (???)")
+			elif y is not None and z is not None:
+				print(f"{x} ({y}-{z})")
+			elif y is not None:
+				print(f"{x} ({y}-)")
+			elif z is not None:
+				print(f"{x} (-{z})")
+
+
+
+except psycopg2.Error as err:
+	print("DB error: ", err)
+finally:
+	if db:
+		db.close()
