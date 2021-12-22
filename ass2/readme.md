@@ -1,6 +1,6 @@
 # COMP3311 20T3 - Assignment 2
 
-- grade: 14/16 
+- grade: 15/16 
 - SQL, PLpgSQL
 
 ## Goal: 
