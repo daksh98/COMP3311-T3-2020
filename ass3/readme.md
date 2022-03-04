@@ -2,7 +2,7 @@
 
 - Python, Psycopg2 and IMDB
 - grade : 100%
-- https://cgi.cse.unsw.edu.au/~cs3311/20T3/assignments/ass3/index.php
+
 
 ## Goal: 
 This assignment aims to give practice in
