@@ -15,3 +15,4 @@ The goal is to build some useful data access operations on the MyMyUNSW database
 A theme of this assignment is "dirty data".
 - ass2.sql contains code for project 
 
+#### for more info : https://cgi.cse.unsw.edu.au/~cs3311/20T3/assignments/ass2/index.php
