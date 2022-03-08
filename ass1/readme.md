@@ -2,7 +2,7 @@
 
 - Mapping ER Designs to SQL
 - grade : 11.8/12
-- 
+- https://cgi.cse.unsw.edu.au/~cs3311/20T3/assignments/ass1/index.php
 
 ## Goal: 
 The aim of this assignment is to take a given ER design and convert it to a database schema expressed in the SQL data definition language. In some sense, this comes in part-way through the database development process; you would nomally start with requirements and develop an ER model and then convert it to SQL. We have done the first bit for you.
